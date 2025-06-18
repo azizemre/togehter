@@ -1,0 +1,215 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: ChatGPT <user@chatgpt>
+Subject: [PATCH] Düzgün Chat sekmesi ve ChatScreen entegrasyonu
+
+### 1. Eski app/chat klasörünü kaldırıyoruz
+delete mode 100644 app/chat/page.tsx
+
+### 2. app/(tabs)/chat klasörünü oluşturup içine page.tsx ekliyoruz
+create mode 100644 app/(tabs)/chat/page.tsx
+--- /dev/null
++++ b/app/(tabs)/chat/page.tsx
+@@ -0,0 +1,9 @@
++import React from 'react';
++import ChatScreen from '../../../components/ChatScreen';
++
++export default function ChatPage() {
++  return <ChatScreen />;
++}
++
+
+### 3. app/(tabs)/_layout.tsx dosyasını yalnızca TabLayout için düzenliyoruz
+diff --git a/app/(tabs)/_layout.tsx b/app/(tabs)/_layout.tsx
+index e69de29..abcdef1 100644
+--- a/app/(tabs)/_layout.tsx
++++ b/app/(tabs)/_layout.tsx
+@@ -0,0 +1,11 @@
++import { Tabs } from 'expo-router';
++
++export default function TabLayout() {
++  return (
++    <Tabs>
++      <Tabs.Screen name="pet" options={{ title: 'Pet' }} />
++      <Tabs.Screen name="chat" options={{ title: 'Sohbet' }} />
++    </Tabs>
++  );
++}
+
+### 4. components/ChatScreen.tsx dosyasını tam sohbet UI koduyla dolduruyoruz
+diff --git a/components/ChatScreen.tsx b/components/ChatScreen.tsx
+index e69de29..1234567 100644
+--- a/components/ChatScreen.tsx
++++ b/components/ChatScreen.tsx
+@@ -1,0 +1,200 @@
++import React, { useState, useEffect, useRef } from 'react';
++import {
++  View, Text, ScrollView,
++  TextInput, TouchableOpacity,
++  KeyboardAvoidingView, StyleSheet, Platform
++} from 'react-native';
++import { LinearGradient } from 'expo-linear-gradient';
++import { SafeAreaView } from 'react-native-safe-area-context';
++import { Send } from 'lucide-react-native';
++import { usePet } from '@/contexts/PetContext';
++import { ChatService } from './ChatService';
++
++interface Message {
++  id: string;
++  text: string;
++  isMe: boolean;
++  timestamp: Date;
++}
++
++export default function ChatScreen() {
++  const [messages, setMessages] = useState<Message[]>([]);
++  const [inputText, setInputText] = useState('');
++  const scrollRef = useRef<ScrollView>(null);
++  const { addCarePoints } = usePet();
++
++  useEffect(() => {
++    (async () => {
++      const saved = await ChatService.getMessages();
++      setMessages(saved);
++      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: false }), 0);
++    })();
++  }, []);
++
++  const sendMessage = async () => {
++    if (!inputText.trim()) return;
++    const msg: Message = {
++      id: Date.now().toString(),
++      text: inputText.trim(),
++      isMe: true,
++      timestamp: new Date(),
++    };
++    setMessages(m => [...m, msg]);
++    await ChatService.saveMessage(msg);
++    addCarePoints(5);
++    setInputText('');
++    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
++    // Partner cevabı simülasyonu ekleyebilirsiniz
++  };
++
++  const formatTime = (d: Date) =>
++    d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
++
++  return (
++    <LinearGradient colors={['#8B5CF6','#3B82F6']} style={{flex:1}}>
++      <SafeAreaView style={{flex:1}}>
++        <View style={styles.header}>
++          <Text style={styles.headerTitle}>Your Partner 💕</Text>
++          <Text style={styles.headerSubtitle}>Always here for you</Text>
++        </View>
++        <KeyboardAvoidingView
++          style={styles.chatContainer}
++          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
++        >
++          <ScrollView
++            ref={scrollRef}
++            contentContainerStyle={styles.messagesContent}
++            showsVerticalScrollIndicator={false}
++          >
++            {messages.length === 0 ? (
++              <View style={styles.emptyState}>
++                <Text style={styles.emptyText}>Start chatting!</Text>
++              </View>
++            ) : (
++              messages.map(m => (
++                <View
++                  key={m.id}
++                  style={[
++                    styles.messageWrapper,
++                    m.isMe ? styles.myWrapper : styles.partnerWrapper,
++                  ]}
++                >
++                  <View
++                    style={[
++                      styles.bubble,
++                      m.isMe ? styles.myBubble : styles.partnerBubble,
++                    ]}
++                  >
++                    <Text
++                      style={[
++                        styles.bubbleText,
++                        m.isMe && { color: '#fff' },
++                      ]}
++                    >
++                      {m.text}
++                    </Text>
++                  </View>
++                  <Text style={styles.time}>{formatTime(m.timestamp)}</Text>
++                </View>
++              ))
++            )}
++          </ScrollView>
++          <View style={styles.inputRow}>
++            <TextInput
++              style={styles.input}
++              value={inputText}
++              onChangeText={setInputText}
++              placeholder="Type a message..."
++              placeholderTextColor="#888"
++            />
++            <TouchableOpacity
++              style={[styles.sendBtn, !inputText.trim() && styles.disabledBtn]}
++              onPress={sendMessage}
++              disabled={!inputText.trim()}
++            >
++              <Send size={20} color={!inputText.trim()? '#888':'#fff'} />
++            </TouchableOpacity>
++          </View>
++        </KeyboardAvoidingView>
++      </SafeAreaView>
++    </LinearGradient>
++  );
++}
++
++const styles = StyleSheet.create({
++  header: { padding:20, alignItems:'center' },
++  headerTitle: { fontSize:24, color:'#fff', marginBottom:4 },
++  headerSubtitle: { fontSize:14, color:'#e5e7eb' },
++  chatContainer: {
++    flex:1,
++    backgroundColor:'#fff',
++    borderTopLeftRadius:20,
++    borderTopRightRadius:20,
++  },
++  messagesContent: { padding:20 },
++  emptyState: { flex:1, justifyContent:'center', alignItems:'center' },
++  emptyText: { fontSize:16, color:'#666' },
++  messageWrapper: { marginBottom:16 },
++  myWrapper: { alignItems:'flex-end' },
++  partnerWrapper: { alignItems:'flex-start' },
++  bubble: {
++    maxWidth:'80%',
++    padding:12,
++    borderRadius:20,
++  },
++  myBubble: { backgroundColor:'#8B5CF6', borderBottomRightRadius:6 },
++  partnerBubble: { backgroundColor:'#eee', borderBottomLeftRadius:6 },
++  bubbleText: { fontSize:16, lineHeight:22, color:'#000' },
++  time: { fontSize:12, color:'#888', marginTop:4 },
++  inputRow: {
++    flexDirection:'row',
++    padding:16,
++    borderTopWidth:1,
++    borderColor:'#ddd',
++    alignItems:'center',
++  },
++  input: {
++    flex:1,
++    backgroundColor:'#f0f0f0',
++    borderRadius:20,
++    padding:12,
++    marginRight:12,
++  },
++  sendBtn: {
++    width:44,
++    height:44,
++    backgroundColor:'#8B5CF6',
++    borderRadius:22,
++    justifyContent:'center',
++    alignItems:'center',
++  },
++  disabledBtn: { backgroundColor:'#ccc' },
++});
